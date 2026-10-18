@@ -21,12 +21,20 @@ def valid_int(value):
         raise argparse.ArgumentTypeError("Значение должно быть неотрицательным")
     return number
 
+def valid_package(value):
+    """Check that a package uses the groupId:artifactId format."""
+    if value.count(':') != 1:
+        raise argparse.ArgumentTypeError(
+            "use Maven format groupId:artifactId"
+        )
+    return value
+
 
 def parse_arguments():
     """Считывание аргументов командной строки"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-p", "--package", required=True, type=valid_input,
+        "-p", "--package", required=True, type=valid_package,
         help="Имя анализируемого пакета")
     parser.add_argument(
         "-r", "--repository", required=True, type=valid_input,

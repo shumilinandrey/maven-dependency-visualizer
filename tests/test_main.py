@@ -2,14 +2,15 @@ import argparse
 import sys
 
 import pytest
-from src.main import main, parse_arguments, valid_input, valid_int
+from src.main import valid_input, valid_int, valid_package
+from src.main import parse_arguments
 
 
 def valid_args():
     """Набор правильных аргументов"""
     return [
-        "--package", "name",
-        "--repository", "https://github.com",
+        "--package", "org.apache.commons:commons-lang3",
+        "--repository", "https://repo.maven.apache.org/maven2",
         "--mode", "url",
         "--version", "1.0",
         "--ascii-tree", "n",
@@ -26,6 +27,18 @@ def test_empty_input():
     """Проверка пустого строкового параметра"""
     with pytest.raises(argparse.ArgumentTypeError):
         valid_input("")
+
+
+def test_valid_package():
+    """Проверка корректного Maven-координата"""
+    package = "org.apache.commons:commons-lang3"
+    assert valid_package(package) == package
+
+
+def test_invalid_package():
+    """Проверка некорректного Maven-координата"""
+    with pytest.raises(argparse.ArgumentTypeError):
+        valid_package("abcd")
 
 
 def test_valid_int():
@@ -45,7 +58,7 @@ def test_parse_arguments(monkeypatch):
 
     settings = parse_arguments()
 
-    assert settings.package == "name"
+    assert settings.package == "org.apache.commons:commons-lang3"
     assert settings.mode == "url"
     assert settings.max_depth == 2
 
@@ -92,5 +105,15 @@ def test_missing_test_file(monkeypatch):
     arguments[arguments.index("--mode") + 1] = "path"
     arguments[arguments.index("--repository") + 1] = "missing.txt"
     monkeypatch.setattr(sys, "argv", ["main.py", *arguments])
+    with pytest.raises(SystemExit):
+        parse_arguments()
+
+
+def test_invalid_package_argument(monkeypatch):
+    """Проверка указание некорректного пакеджа"""
+    arguments = valid_args()
+    arguments[arguments.index("--package") + 1] = "commons-lang3"
+    monkeypatch.setattr(sys, "argv", ["main.py", *arguments])
+
     with pytest.raises(SystemExit):
         parse_arguments()

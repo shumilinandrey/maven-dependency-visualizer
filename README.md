@@ -23,7 +23,7 @@
 
 | Параметр | Назначение |
 | --- | --- |
-| `-p`, `--package` | Имя анализируемого пакета. |
+| `-p`, `--package` | Имя анализируемого пакета в формате groupId:artifactId. |
 | `-r`, `--repository` | URL Maven-репозитория или путь к тестовому файлу. |
 | `-m`, `--mode` | `url` для удалённого репозитория или `path` для файла. |
 | `-v`, `--version` | Версия анализируемого пакета. |
@@ -41,7 +41,7 @@
 Запуск приложения:
 
 ```bat
-python3 src/main.py -p name -r test.pom -m path -v 1.0 -t n -d 123
+python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 1.0 -t n -d 123
 ```
 
 Запуск тестов:
@@ -53,15 +53,15 @@ python -m pytest -v tests
 ## 4. Примеры использования
 
 ```bash
-python3 src/main.py -p name -r test.pom -m path -v 1.0 -t n -d 123
+python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 1.0 -t n -d 123
 ```
 
 Пример вывода:
 
 ```text
-package=name
-repository=test.pom
-mode=path
+package=org.apache.commons:commons-lang3
+repository=https://repo.maven.apache.org/maven2
+mode=url
 version=1.0
 ascii-tree=n
 max-depth=123
@@ -72,7 +72,7 @@ max-depth=123
 Если указать отрицательную глубину:
 
 ```bash
-python3 src/main.py -p demo-app -r test.pom -m path -v 1.0 -t n -d -1
+python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 1.0 -t n -d -1
 ```
 
 Программа завершится с сообщением о том, что глубина должна быть натуральным числом.
