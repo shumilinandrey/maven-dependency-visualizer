@@ -6,6 +6,9 @@ from src.main import valid_input, valid_int, valid_package
 from src.main import parse_arguments
 
 
+EXPECTED_DEPTH = 2
+
+
 def valid_args():
     """Набор правильных аргументов"""
     return [
@@ -60,7 +63,7 @@ def test_parse_arguments(monkeypatch):
 
     assert settings.package == "org.apache.commons:commons-lang3"
     assert settings.mode == "url"
-    assert settings.max_depth == 2
+    assert settings.max_depth == EXPECTED_DEPTH
 
 
 def test_missing_arguments(monkeypatch):
