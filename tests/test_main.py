@@ -7,6 +7,7 @@ from src.main import parse_arguments
 
 
 EXPECTED_DEPTH = 2
+VALID_INT = 123
 
 
 def valid_args():
@@ -46,7 +47,7 @@ def test_invalid_package():
 
 def test_valid_int():
     """Проверка корректного числового параметра"""
-    assert valid_int("123") == 123
+    assert valid_int("123") == VALID_INT
 
 
 def test_invalid_int():

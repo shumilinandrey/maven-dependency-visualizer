@@ -7,6 +7,7 @@ import xml.etree.ElementTree as element_tree
 
 
 ERROR_EXIT_CODE = 1
+LINKS_PARTS = 2
 
 
 def valid_input(value):
@@ -162,7 +163,7 @@ def parse_arguments():
             parser.error("Указанный файл не существует")
     else:
         link = settings.repository.split("://")
-        if link[0] not in ["http", "https"] or len(link) != 2:
+        if link[0] not in ["http", "https"] or len(link) != LINKS_PARTS:
             parser.error("Указана неверная ссылка")
     return settings
 
