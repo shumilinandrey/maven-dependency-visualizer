@@ -3,7 +3,11 @@ import os
 import sys
 import urllib.error
 import urllib.request
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as element_tree
+
+
+ERROR_EXIT_CODE = 1
+
 
 def valid_input(value):
     """Проверяет корректность ввода строкового значения"""
@@ -79,47 +83,53 @@ def apply_property(value, properties):
     return properties.get(key, value)
 
 
+def parse_dependency(dep, namespace, properties):
+    """Извлекает поля одной зависимости."""
+    group_el = dep.find(f"{namespace}groupId")
+    artifact_el = dep.find(f"{namespace}artifactId")
+    version_el = dep.find(f"{namespace}version")
+    scope_el = dep.find(f"{namespace}scope")
+    group = (
+        group_el.text.strip()
+        if group_el is not None and group_el.text
+        else ""
+    )
+    artifact = (
+        artifact_el.text.strip()
+        if artifact_el is not None and artifact_el.text
+        else ""
+    )
+    version = (
+        version_el.text.strip()
+        if version_el is not None and version_el.text
+        else "managed"
+    )
+    scope = (
+        scope_el.text.strip()
+        if scope_el is not None and scope_el.text
+        else "compile"
+    )
+    group = apply_property(group, properties)
+    artifact = apply_property(artifact, properties)
+    version = apply_property(version, properties)
+    return group, artifact, version, scope
+
+
 def parse_dependencies(xml_text):
-    """Извлекает прямые зависимости из XML-документа"""
-    root = ET.fromstring(xml_text)
-    ns = ""
+    """Извлекает прямые зависимости из XML-документа."""
+    root = element_tree.fromstring(xml_text)
+    namespace = ""
     if root.tag.startswith("{"):
-        ns = root.tag[:root.tag.index("}") + 1]
-    properties = extract_properties(root, ns)
-    deps = []
-    deps_elem = root.find(f"{ns}dependencies")
+        namespace = root.tag[:root.tag.index("}") + 1]
+    properties = extract_properties(root, namespace)
+    deps_elem = root.find(f"{namespace}dependencies")
     if deps_elem is None:
-        return deps
-    for dep in deps_elem.findall(f"{ns}dependency"):
-        group_el = dep.find(f"{ns}groupId")
-        artifact_el = dep.find(f"{ns}artifactId")
-        version_el = dep.find(f"{ns}version")
-        scope_el = dep.find(f"{ns}scope")
-        group = (
-            group_el.text.strip()
-            if group_el is not None and group_el.text
-            else ""
-        )
-        artifact = (
-            artifact_el.text.strip()
-            if artifact_el is not None and artifact_el.text
-            else ""
-        )
-        version = (
-            version_el.text.strip()
-            if version_el is not None and version_el.text
-            else "managed"
-        )
-        scope = (
-            scope_el.text.strip()
-            if scope_el is not None and scope_el.text
-            else "compile"
-        )
-        group = apply_property(group, properties)
-        artifact = apply_property(artifact, properties)
-        version = apply_property(version, properties)
-        deps.append((group, artifact, version, scope))
-    return deps
+        return []
+    dependencies = []
+    for dep in deps_elem.findall(f"{namespace}dependency"):
+        dependency = parse_dependency(dep, namespace, properties)
+        dependencies.append(dependency)
+    return dependencies
 
 
 def parse_arguments():
@@ -173,9 +183,9 @@ def main():
         print(f"Прямые зависимости для {settings.package}:{settings.version}:")
         for group, artifact, version, scope in dependencies:
             print(f"  - {group}:{artifact}:{version} [{scope}]")
-    except (urllib.error.URLError, OSError, ET.ParseError) as error:
+    except (urllib.error.URLError, OSError, element_tree.ParseError) as error:
         print(f"Ошибка при получении зависимостей: {error}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(ERROR_EXIT_CODE)
 
 
 if __name__ == "__main__":
