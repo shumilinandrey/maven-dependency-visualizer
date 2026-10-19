@@ -4,11 +4,18 @@
 
 Проект представляет собой CLI-приложение на Python для настройки анализа зависимостей Maven-пакетов.
 
-На первом этапе реализованы:
+## Этап 1. Минимальный прототип с конфигурацией
 
-* чтение параметров командной строки
-* проверка обязательных параметров и их базовых значений
-* вывод всех параметров
+На данном этапе реализованы чтение параметров командной строки, 
+проверка обязательных параметров и их базовых значений,
+вывод всех параметров
+
+## Этап 2. Получение прямых зависимостей
+
+Программа получает POM-файл пакета указанной версии и выводит его прямые зависимости.
+Для работы используются стандартные модули Python:
+`urllib.request` для загрузки файла и `xml.etree.ElementTree` для чтения XML.
+Менеджеры пакетов и сторонние библиотеки для получения зависимостей не используются.
 
 ## 2. Функции и параметры
 
@@ -17,6 +24,11 @@
 * `valid_input(value)` - проверяет, что строковое значение не пустое.
 * `valid_int(value)` - преобразует значение в целое число и отклоняет отрицательные значения.
 * `parse_arguments()` - создаёт парсер, считывает обязательные аргументы и проверяет URL или наличие файла.
+* `get_pom_relative_path(...)` - строит путь к POM-файлу по координатам пакета.
+* `fetch_pom_content(...)` - читает POM с диска или загружает из репозитория.
+* `extract_properties(...)` - получает свойства из POM.
+* `apply_property(...)` - подставляет значение свойства вида `${name}`.
+* `parse_dependencies(...)` - извлекает прямые зависимости из POM.
 * `main()` - получает настройки через `parse_arguments()` и выводит их.
 
 ### Параметры командной строки
@@ -41,7 +53,7 @@
 Запуск приложения:
 
 ```bat
-python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 1.0 -t n -d 123
+python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 3.12.0 -t n -d 123
 ```
 
 Запуск тестов:
@@ -53,7 +65,7 @@ python -m pytest -v tests
 ## 4. Примеры использования
 
 ```bash
-python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 1.0 -t n -d 123
+python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 3.12.0 -t n -d 123
 ```
 
 Пример вывода:
@@ -62,7 +74,7 @@ python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.ap
 package=org.apache.commons:commons-lang3
 repository=https://repo.maven.apache.org/maven2
 mode=url
-version=1.0
+version=3.12.0
 ascii-tree=n
 max-depth=123
 ```
@@ -72,7 +84,7 @@ max-depth=123
 Если указать отрицательную глубину:
 
 ```bash
-python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 1.0 -t n -d -1
+python3 src/main.py -p org.apache.commons:commons-lang3 -r https://repo.maven.apache.org/maven2 -m url -v 3.12.0 -t n -d -1
 ```
 
 Программа завершится с сообщением о том, что глубина должна быть натуральным числом.
