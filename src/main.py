@@ -1,193 +1,131 @@
 import argparse
-import os
+import re
 import sys
-import urllib.error
-import urllib.request
-import xml.etree.ElementTree as element_tree
+from pathlib import Path
+from urllib.parse import urlsplit
+from xml.etree.ElementTree import ParseError
 
+from src.graph import build_graph, find_cycles
+from src.repository import MavenRepository, read_test_repository
 
-ERROR_EXIT_CODE = 1
-LINKS_PARTS = 2
+SUCCESS = 0
+ERROR = 1
+MIN_DEPTH = 0
+MAVEN_NAME = r"[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+"
+VERSION = r"[A-Za-z0-9_+.-]+"
 
 
 def valid_input(value):
-    """Проверяет корректность ввода строкового значения"""
-    if not value.strip():
+    """Отклоняет пустое строковое значение."""
+    value = value.strip()
+    if not value:
         raise argparse.ArgumentTypeError("Значение не может быть пустым")
     return value
 
 
 def valid_int(value):
-    """Проверяет корректность ввода числового значения"""
+    """Принимает только неотрицательную целую глубину."""
     try:
         number = int(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError(
-            "Значение должно быть числом"
-        ) from error
-    if number < 0:
-        raise argparse.ArgumentTypeError("Значение должно быть неотрицательным")
+        raise argparse.ArgumentTypeError("Ожидается целое число") from error
+    if number < MIN_DEPTH:
+        raise argparse.ArgumentTypeError("Глубина не может быть отрицательной")
     return number
 
 
-def valid_package(value):
-    """Check that a package uses the groupId:artifactId format."""
-    if value.count(':') != 1:
-        raise argparse.ArgumentTypeError(
-            "use Maven format groupId:artifactId"
-        )
-    return value
-
-
-def get_pom_relative_path(group_id, artifact_id, version):
-    """Формирует относительный путь к pom-файлу по стандарту Maven"""
-    group_path = group_id.replace(".", "/")
-    filename = f"{artifact_id}-{version}.pom"
-    return f"{group_path}/{artifact_id}/{version}/{filename}"
-
-
-def fetch_pom_content(repository, mode, group_id, artifact_id, version):
-    """Считывает pom.xml"""
-    if mode == "path" and os.path.isfile(repository):
-        with open(repository, "r", encoding="utf-8") as file_handle:
-            return file_handle.read()
-    rel_path = get_pom_relative_path(group_id, artifact_id, version)
-    if mode == "path":
-        full_path = os.path.join(repository, rel_path)
-        with open(full_path, "r", encoding="utf-8") as file_handle:
-            return file_handle.read()
-    base_url = repository.rstrip("/")
-    target_url = f"{base_url}/{rel_path}"
-    req = urllib.request.Request(
-        target_url, headers={"User-Agent": "DependencyVisualizer/1.0"}
-    )
-    with urllib.request.urlopen(req) as response:
-        return response.read().decode("utf-8")
-
-
-def extract_properties(root, namespace):
-    """Извлекает словарь значений из блока properties"""
-    properties = {}
-    props_elem = root.find(f"{namespace}properties")
-    if props_elem is not None:
-        for prop in props_elem:
-            tag = prop.tag.split("}")[-1]
-            properties[tag] = (prop.text or "").strip()
-    return properties
-
-
-def apply_property(value, properties):
-    """Подставляет значение свойства вида ${name}"""
-    if not value.startswith("${") or not value.endswith("}"):
-        return value
-    key = value[2:-1]
-    return properties.get(key, value)
-
-
-def parse_dependency(dep, namespace, properties):
-    """Извлекает поля одной зависимости."""
-    group_el = dep.find(f"{namespace}groupId")
-    artifact_el = dep.find(f"{namespace}artifactId")
-    version_el = dep.find(f"{namespace}version")
-    scope_el = dep.find(f"{namespace}scope")
-    group = (
-        group_el.text.strip()
-        if group_el is not None and group_el.text
-        else ""
-    )
-    artifact = (
-        artifact_el.text.strip()
-        if artifact_el is not None and artifact_el.text
-        else ""
-    )
-    version = (
-        version_el.text.strip()
-        if version_el is not None and version_el.text
-        else "managed"
-    )
-    scope = (
-        scope_el.text.strip()
-        if scope_el is not None and scope_el.text
-        else "compile"
-    )
-    group = apply_property(group, properties)
-    artifact = apply_property(artifact, properties)
-    version = apply_property(version, properties)
-    return group, artifact, version, scope
-
-
-def parse_dependencies(xml_text):
-    """Извлекает прямые зависимости из XML-документа."""
-    root = element_tree.fromstring(xml_text)
-    namespace = ""
-    if root.tag.startswith("{"):
-        namespace = root.tag[:root.tag.index("}") + 1]
-    properties = extract_properties(root, namespace)
-    deps_elem = root.find(f"{namespace}dependencies")
-    if deps_elem is None:
-        return []
-    dependencies = []
-    for dep in deps_elem.findall(f"{namespace}dependency"):
-        dependency = parse_dependency(dep, namespace, properties)
-        dependencies.append(dependency)
-    return dependencies
-
-
-def parse_arguments():
-    """Считывание аргументов командной строки"""
-    parser = argparse.ArgumentParser()
+def create_parser():
+    """Объявляет параметры командной строки."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("-p", "--package", required=True, type=valid_input)
+    parser.add_argument("-r", "--repository", required=True, type=valid_input)
     parser.add_argument(
-        "-p", "--package", required=True, type=valid_package,
-        help="Имя анализируемого пакета")
-    parser.add_argument(
-        "-r", "--repository", required=True, type=valid_input,
-        help="URL-адрес репозитория или путь к файлу")
-    parser.add_argument(
-        "-m", "--mode", required=True, choices=("url", "path"),
-        help="Режим работы url/path"
+        "-m", "--mode", required=True, choices=("url", "path", "test")
     )
+    parser.add_argument("-v", "--version", required=True, type=valid_input)
     parser.add_argument(
-        "-v", "--version", required=True, type=valid_input,
-        help="Версия пакета")
-    parser.add_argument(
-        "-t", "--ascii-tree", required=True, choices=("y", "n"),
-        help="Вывод ascii-дерева y/n"
+        "-t", "--ascii-tree", required=True, choices=("y", "n")
     )
-    parser.add_argument(
-        "-d", "--max-depth", required=True, type=valid_int,
-        help="Максимальная глубина анализа"
-    )
-    settings = parser.parse_args()
-    if settings.mode == "path":
-        if not os.path.isfile(settings.repository):
-            parser.error("Указанный файл не существует")
+    parser.add_argument("-d", "--max-depth", required=True, type=valid_int)
+    return parser
+
+
+def validate_url(repository, parser):
+    """Проверяет схему, сервер и отсутствие параметров в URL."""
+    address = urlsplit(repository)
+    if address.scheme not in ("http", "https") or not address.hostname:
+        parser.error("Требуется URL репозитория с http или https")
+    if address.query or address.fragment:
+        parser.error("URL репозитория не должен содержать query/fragment")
+
+
+def validate_settings(settings, parser):
+    """Проверяет параметры с учетом выбранного режима."""
+    pattern = r"[A-Z]+" if settings.mode == "test" else MAVEN_NAME
+    if re.fullmatch(pattern, settings.package) is None:
+        parser.error("Имя пакета: A, B, C для test; groupId:artifactId иначе")
+    if re.fullmatch(VERSION, settings.version) is None:
+        parser.error("Некорректная версия пакета")
+    if settings.version in (".", ".."):
+        parser.error("Некорректная версия пакета")
+    if settings.mode == "url":
+        validate_url(settings.repository, parser)
     else:
-        link = settings.repository.split("://")
-        if link[0] not in ["http", "https"] or len(link) != LINKS_PARTS:
-            parser.error("Указана неверная ссылка")
+        path = Path(settings.repository)
+        if not path.exists():
+            parser.error("Путь к репозиторию не существует")
+        if settings.mode == "test" and not path.is_file():
+            parser.error("Для test требуется XML-файл")
+
+
+def parse_arguments(argv=None):
+    """Читает и проверяет аргументы CLI."""
+    parser = create_parser()
+    settings = parser.parse_args(argv)
+    try:
+        validate_settings(settings, parser)
+    except ValueError as error:
+        parser.error(str(error))
     return settings
 
 
-def main():
-    """Точка входа программы"""
-    settings = parse_arguments()
-    group_id, artifact_id = settings.package.split(":", 1)
+def get_source(settings):
+    """Возвращает корневой узел и функцию получения зависимостей."""
+    if settings.mode == "test":
+        repository = read_test_repository(settings.repository)
+        if settings.package not in repository:
+            raise ValueError("Корневого пакета нет в тестовом репозитории")
+        return settings.package, repository.__getitem__
+    root = f"{settings.package}:{settings.version}"
+    repository = MavenRepository(settings.repository, settings.mode, root)
+    return root, repository.get_dependencies
+
+
+def print_graph(graph, cycles):
+    """Печатает список смежности и найденные циклы."""
+    print("Граф зависимостей в пределах заданной глубины:")
+    for package, dependencies in graph.items():
+        print(f"{package} -> {', '.join(dependencies) or '[]'}")
+    if not cycles:
+        print("В построенном графе циклы не обнаружены")
+    for cycle in cycles:
+        print("Цикл: " + " -> ".join(cycle))
+
+
+def main(argv=None):
+    """Выполняет анализ; ошибки данных направляет в stderr."""
+    settings = parse_arguments(argv)
     try:
-        content = fetch_pom_content(
-            settings.repository,
-            settings.mode,
-            group_id,
-            artifact_id,
-            settings.version
-        )
-        dependencies = parse_dependencies(content)
-        print(f"Прямые зависимости для {settings.package}:{settings.version}:")
-        for group, artifact, version, scope in dependencies:
-            print(f"  - {group}:{artifact}:{version} [{scope}]")
-    except (urllib.error.URLError, OSError, element_tree.ParseError) as error:
-        print(f"Ошибка при получении зависимостей: {error}", file=sys.stderr)
-        sys.exit(ERROR_EXIT_CODE)
+        root, loader = get_source(settings)
+        graph = build_graph(root, loader, settings.max_depth)
+        print_graph(graph, find_cycles(graph))
+        if settings.ascii_tree == "y":
+            print("Вывод ASCII-дерева будет реализован на этапе 5")
+        return SUCCESS
+    except (OSError, ValueError, ParseError) as error:
+        print(f"Ошибка анализа: {error}", file=sys.stderr)
+        return ERROR
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

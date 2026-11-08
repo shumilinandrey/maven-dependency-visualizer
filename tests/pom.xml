@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repository>
+    <package name="A">
+        <dependency name="B"/>
+        <dependency name="C"/>
+    </package>
+    <package name="B"><dependency name="D"/></package>
+    <package name="C"><dependency name="D"/></package>
+    <package name="D"/>
+    <package name="E"><dependency name="F"/></package>
+    <package name="F"><dependency name="G"/></package>
+    <package name="G"><dependency name="E"/></package>
+    <package name="H"/>
+    <package name="I"><dependency name="I"/></package>
+</repository>
